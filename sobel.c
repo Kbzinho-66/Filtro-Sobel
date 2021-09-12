@@ -61,12 +61,16 @@ int main(int argc, char **argv){
 
     int altura, largura;
 	int i, j;
+	unsigned char grey;
 
-	// Criar a matriz de Pixels
+	// Criar as matriz de Pixels e o valor Greyscale de cada Pixel
 	// TODO Criar em uma área de memória compartilhada
 	Pixel **imagem = (Pixel**) malloc(h.altura * sizeof(Pixel *));
+	unsigned char **greyscale = (unsigned char**) malloc(h.altura * sizeof(unsigned char *));
+
 	for(i=0; i<h.altura; i++) {
 		imagem[i] = (Pixel*) malloc(h.largura * sizeof(Pixel)); 
+		greyscale[i] = (unsigned char*) malloc(h.largura * sizeof(unsigned char));
 	}
 
 	// Ler todos os pixels da imagem
@@ -75,12 +79,41 @@ int main(int argc, char **argv){
 			fread(&imagem[i][j], sizeof(Pixel), 1, arquivoEntrada);
 
 			// Converter pra Grayscale
-			imagem[i][j].red = (unsigned char) imagem[i][j].red * 0.2126;
-			imagem[i][j].green = (unsigned char) imagem[i][j].green * 0.7152;
-			imagem[i][j].blue = (unsigned char) imagem[i][j].blue * 0.0722;
-
+			grey = imagem[i][j].red * 0.2126 + imagem[i][j].green * 0.7152 + imagem[i][j].blue * 0.0722;
+			imagem[i][j].red = imagem[i][j].green = imagem[i][j].blue = grey;
+			greyscale[i][j] = grey;
 		}
 	}
 
 	fclose(arquivoEntrada);
+
+	// Gerar um arquivo Greyscale
+	fwrite(&h, sizeof(Header), 1, arquivoSaida);
+
+	for (i=0; i<h.altura; i++) {
+		for (j=0; j<h.largura; j++) {
+			fwrite(&imagem[i][j], sizeof(Pixel), 1, arquivoSaida);
+		}
+	}
+
+	fclose(arquivoSaida);
+
+	unsigned char gx, gy;
+	// Aplicação do filtro de Sobel
+	for (i=0; i<h.altura; i++) {
+		for (j=0; j<h.largura; j++) {
+
+			if (i > 0 && i < h.altura - 1 && j > 0 && j < h.largura - 1) { // Pixel pra dentro da borda
+				gx = 
+					greyscale[i-1][j-1] * -1 + greyscale[i-1][j] * 0 + greyscale[i-1][j+1] * 1
+				+ 	greyscale[i][j-1] * -2 	 + greyscale[i][j] * 0 	 + greyscale[i][j+1] * 2
+				+ 	greyscale[i+1][j-1] * -1 + greyscale[i+1][j] * 0 + greyscale[i+1][j+1] * 1;
+
+				gy = 
+					greyscale[i-1][j-1] * 1  + greyscale[i-1][j] * 2  + greyscale[i-1][j+1] * 1
+				+ 	greyscale[i][j-1] * 0 	 + greyscale[i][j] * 0 	  + greyscale[i][j+1] * 0
+				+ 	greyscale[i+1][j-1] * -1 + greyscale[i+1][j] * -2 + greyscale[i+1][j+1] * -1;
+			} 
+		}
+	}
 }
