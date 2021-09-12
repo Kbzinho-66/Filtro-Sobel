@@ -6,6 +6,16 @@
 
 #pragma pack(1)
 
+#define CELL_A i-1][j-1
+#define CELL_B i-1][j
+#define CELL_C i-1][j+1
+#define CELL_D i][j-1
+#define CELL_E i][j
+#define CELL_F i][j+1
+#define CELL_G i+1][j-1
+#define CELL_H i+1][j
+#define CELL_I i+1][j+1
+
 struct header {
 	unsigned short tipo;
 	unsigned int tamanho_arquivo;
@@ -39,7 +49,7 @@ int main(int argc, char **argv){
 
     if (argc != 3) {
         printf("%s [nome da imagem de entrada] [numero de processos]\n", argv[0]);
-		// exit(0);
+		exit(0);
     }
 
     FILE *arquivoEntrada = fopen(argv[1], "rb");
@@ -104,16 +114,61 @@ int main(int argc, char **argv){
 		for (j=0; j<h.largura; j++) {
 
 			if (i > 0 && i < h.altura - 1 && j > 0 && j < h.largura - 1) { // Pixel pra dentro da borda
+
 				gx = 
-					greyscale[i-1][j-1] * -1 + greyscale[i-1][j] * 0 + greyscale[i-1][j+1] * 1
-				+ 	greyscale[i][j-1] * -2 	 + greyscale[i][j] * 0 	 + greyscale[i][j+1] * 2
-				+ 	greyscale[i+1][j-1] * -1 + greyscale[i+1][j] * 0 + greyscale[i+1][j+1] * 1;
+					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
+				+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
+				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
 
 				gy = 
-					greyscale[i-1][j-1] * 1  + greyscale[i-1][j] * 2  + greyscale[i-1][j+1] * 1
-				+ 	greyscale[i][j-1] * 0 	 + greyscale[i][j] * 0 	  + greyscale[i][j+1] * 0
-				+ 	greyscale[i+1][j-1] * -1 + greyscale[i+1][j] * -2 + greyscale[i+1][j+1] * -1;
-			} 
+					greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
+				+ 	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
+				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
+
+			} else if (i == 0 && j > 0 && j < h.largura - 1) { // Primeira linha
+
+				gx = 
+					greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
+				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
+
+				gy = 
+					greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
+				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
+
+			} else if (i == h.altura - 1) { // Última linha
+				
+				gx = 
+					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
+				+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2;
+
+				gy = 
+					greyscale[CELL_A] * 1 + greyscale[CELL_B] * 2 + greyscale[CELL_C] * 1
+				+ 	greyscale[CELL_D] * 0 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 0;
+
+			} else if (j == 0) { // Primeira coluna
+
+				gx =
+					greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
+				+	greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
+				+	greyscale[CELL_H] * 0 +	greyscale[CELL_I] * 1;
+
+				gy = 
+					greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
+				+	greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
+				+	greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
+				
+			} else if (j == h.largura - 1) { // Última coluna
+
+				gx =
+					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0
+				+	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0
+				+	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0;
+
+				gy = 
+					greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2
+				+	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0
+				+	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2;
+			}
 		}
 	}
 }
