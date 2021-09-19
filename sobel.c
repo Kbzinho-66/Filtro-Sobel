@@ -46,30 +46,36 @@ typedef struct pixel Pixel;
 int main(int argc, char **argv){
 
     Header h;
+	FILE *arquivoEntrada, *arquivoSaida;
+	arquivoEntrada = arquivoSaida = NULL;
+	char nomeArquivo[50], saida[100], nomeSemExtensao[50];
 
-    if (argc != 3) {
-        printf("%s [nome da imagem de entrada] [numero de processos]\n", argv[0]);
-		exit(0);
-    }
+    if (argc == 3) {
+		// TODO Fazer a inicialização com processos e tudo
+    } else if (argc <= 1) {
 
-    FILE *arquivoEntrada = fopen(argv[1], "rb");
-    if (arquivoEntrada == NULL) {
+		strcpy(nomeArquivo, "Borboleta.bmp");
+		strcpy(nomeSemExtensao, nomeArquivo);
+	}
+
+	nomeSemExtensao[strlen(nomeSemExtensao) - 4] = '\0';
+	strcpy(saida, nomeSemExtensao);
+	strcat(saida, "_Greyscale");
+
+	arquivoEntrada = fopen(nomeArquivo, "rb");
+	if (arquivoEntrada == NULL) {
         printf("Erro ao abrir a imagem de entrada.\n");
         exit(0);
-    }
+	}
 
-    char saida[100] = "Greyscale_";
-    strcat(saida, argv[1]);
-    FILE *arquivoSaida = fopen(saida, "wb");
+	arquivoSaida = fopen(saida, "wb");
+	if (arquivoSaida == NULL) {
+		printf("Erro ao salvar a imagem em tons de cinza.\n");
+		exit(0);
+	}
+	
+	fread(&h, sizeof(Header), 1, arquivoEntrada);
 
-    if (arquivoSaida == NULL) {
-        printf("Erro ao abrir a imagem em tons de cinza.\n");
-        exit(0);
-    }
-
-    fread(&h, sizeof(Header), 1, arquivoEntrada);
-
-    int altura, largura;
 	int i, j;
 	unsigned char grey;
 
@@ -77,15 +83,22 @@ int main(int argc, char **argv){
 	// TODO Criar em uma área de memória compartilhada
 	Pixel **imagem = (Pixel**) malloc(h.altura * sizeof(Pixel *));
 	unsigned char **greyscale = (unsigned char**) malloc(h.altura * sizeof(unsigned char *));
+	unsigned char **sobel = (unsigned char**) malloc(h.altura * sizeof(unsigned char *));
 
 	for(i=0; i<h.altura; i++) {
 		imagem[i] = (Pixel*) malloc(h.largura * sizeof(Pixel)); 
 		greyscale[i] = (unsigned char*) malloc(h.largura * sizeof(unsigned char));
+		sobel[i] = (unsigned char*) malloc(h.largura * sizeof(unsigned char));
 	}
+
+	// int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
 
 	// Ler todos os pixels da imagem
 	for(i=0; i<h.altura; i++) {
+
+
 		for(j=0; j<h.largura; j++) {
+
 			fread(&imagem[i][j], sizeof(Pixel), 1, arquivoEntrada);
 
 			// Converter pra Grayscale
@@ -93,6 +106,8 @@ int main(int argc, char **argv){
 			imagem[i][j].red = imagem[i][j].green = imagem[i][j].blue = grey;
 			greyscale[i][j] = grey;
 		}
+
+		// fseek(arquivoEntrada, alinhamento, SEEK_CUR);
 	}
 
 	fclose(arquivoEntrada);
@@ -101,74 +116,62 @@ int main(int argc, char **argv){
 	fwrite(&h, sizeof(Header), 1, arquivoSaida);
 
 	for (i=0; i<h.altura; i++) {
+
 		for (j=0; j<h.largura; j++) {
 			fwrite(&imagem[i][j], sizeof(Pixel), 1, arquivoSaida);
 		}
+
+		// for (j=0; j<alinhamento; j++) {
+		// 	fputc(0x00, arquivoSaida);
+		// }
 	}
 
 	fclose(arquivoSaida);
 
-	unsigned char gx, gy;
+	long double gx, gy;
+	double p;
 	// Aplicação do filtro de Sobel
-	for (i=0; i<h.altura; i++) {
-		for (j=0; j<h.largura; j++) {
+	for (i=1; i<h.altura - 1; i++) {
 
-			if (i > 0 && i < h.altura - 1 && j > 0 && j < h.largura - 1) { // Pixel pra dentro da borda
+		for (j=1; j<h.largura - 1; j++) {
 
-				gx = 
-					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
-				+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
-				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
+			gx = 
+				greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
+			+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
+			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
 
-				gy = 
-					greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
-				+ 	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
-				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
+			gy = 
+				greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
+			+ 	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
+			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
 
-			} else if (i == 0 && j > 0 && j < h.largura - 1) { // Primeira linha
-
-				gx = 
-					greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
-				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
-
-				gy = 
-					greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
-				+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
-
-			} else if (i == h.altura - 1) { // Última linha
-				
-				gx = 
-					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
-				+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2;
-
-				gy = 
-					greyscale[CELL_A] * 1 + greyscale[CELL_B] * 2 + greyscale[CELL_C] * 1
-				+ 	greyscale[CELL_D] * 0 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 0;
-
-			} else if (j == 0) { // Primeira coluna
-
-				gx =
-					greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
-				+	greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
-				+	greyscale[CELL_H] * 0 +	greyscale[CELL_I] * 1;
-
-				gy = 
-					greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
-				+	greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
-				+	greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
-				
-			} else if (j == h.largura - 1) { // Última coluna
-
-				gx =
-					greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0
-				+	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0
-				+	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0;
-
-				gy = 
-					greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2
-				+	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0
-				+	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2;
-			}
+			p = sqrt(gx*gx + gy*gy);
+			sobel[i][j] = p;
 		}
 	}
+
+	
+	strcpy(saida, nomeSemExtensao);
+	strcat(saida, "_Sobel");
+	arquivoSaida = fopen(saida, "wb");
+
+	fwrite(&h, sizeof(Header), 1, arquivoSaida);
+
+
+	// Pixel temp;
+	for (i=0; i<h.altura; i++) {
+
+		for (j=0; j<h.largura; j++) {
+			fwrite(&sobel[i][j], sizeof(Pixel), 1, arquivoSaida);
+		}
+
+		// for (j=0; j<alinhamento; j++) {
+		// 	fputc(0x00, arquivoSaida);
+		// }
+		
+	}
+
+	fclose(arquivoSaida);
+
+	return 0;
 }
