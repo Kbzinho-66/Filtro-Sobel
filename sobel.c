@@ -19,7 +19,6 @@
 #define CELL_H linha+1][coluna
 #define CELL_I linha+1][coluna+1
 
-#define greyscale(linha, coluna) greyscale[linha * h.largura + coluna]
 #define sobel(linha, coluna) sobel[linha * h.largura + coluna]
 
 typedef unsigned char Byte;
@@ -56,19 +55,23 @@ Header h;
 
 int main(int argc, char **argv){
 
-	#pragma region   Abertura dos arquivos e declaração das variáveis
-	int numProc;
-	FILE *arquivoEntrada, *arquivoSaida;
-	arquivoEntrada = arquivoSaida = NULL;
-	char nomeArquivo[50];
-	int i, j, p;
+	#pragma region Abertura dos arquivos
 
-    if (argc == 3) {
-		strcpy(nomeArquivo, argv[1]);
-		numProc = atoi(argv[2]);
-    } else if (argc <= 1) {
-		strcpy(nomeArquivo, "Honda.bmp");
+	int numProc;
+	FILE *arquivoEntrada = NULL;
+	char nomeArquivo[50];
+
+	if (argc <= 1) {
+		strcpy(nomeArquivo, "Flor.bmp");
 		numProc = 4;
+
+	} else if (argc == 3) {
+		strcpy(nomeArquivo, argv[1]);
+		numProc = atol(argv[2]);
+
+    } else {
+		printf("%s <Nome do arquivo original> <Número máximo de processos>\n", argv[0]);
+		exit(0);
 	}
 	
 	arquivoEntrada = fopen(nomeArquivo, "rb");
@@ -77,25 +80,29 @@ int main(int argc, char **argv){
         exit(0);
 	}
 
+	#pragma endregion 
+
+	#pragma region Leitura do arquivo e conversão pra Grayscale
+
 	fread(&h, sizeof(Header), 1, arquivoEntrada);	
 
 	int chaveShmSobel = 7, idShmSobel;
 	int tamanho = h.altura * h.largura * sizeof(Byte);
+	int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
+	int i, j;
+	Byte **greyscale, *sobel;
+	Pixel temp;
 
-	Byte **greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
-	#pragma endregion
+	greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
 
 	idShmSobel = shmget(chaveShmSobel, tamanho, 0600 | IPC_CREAT);
-	Byte *sobel = shmat(idShmSobel, NULL, 0);
+	sobel = shmat(idShmSobel, NULL, 0);
 
 	for (i = 0; i < h.altura; i++) {
 		greyscale[i] = (Byte*) malloc (h.largura * sizeof(Byte));
 	}
 
-	int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
-
 	// Ler todos os pixels da imagem e converter pra greyscale
-	Pixel temp;
 	for(i = 0; i < h.altura; i++) {
 		for(j = 0; j < h.largura; j++) {
 			fread(&temp, sizeof(Pixel), 1, arquivoEntrada);
@@ -105,10 +112,11 @@ int main(int argc, char **argv){
 
 	fclose(arquivoEntrada);
 
-	// SECTION Greyscale
+	# pragma endregion
+
 	# pragma region Escrever o arquivo em preto e branco
+	FILE *arquivoSaida = NULL;
 	char saida[50];
-	int pid = 0, rank = 0;
 
 	strcpy(saida, nomeArquivo);
 	saida[strlen(saida) - 4] = '\0'; // Tirar o .bmp do final
@@ -134,9 +142,10 @@ int main(int argc, char **argv){
 
 	fclose(arquivoSaida);
 	# pragma endregion Escrever o arquivo em preto e branco
-	// !SECTION Greyscale
 
-	// SECTION Filtro de Sobel
+	# pragma region Aplicar o filtro de Sobel
+	int pid, rank, p;
+	pid = rank = 0;
 
 	strcpy(saida, nomeArquivo);
 	saida[strlen(saida) - 4] = '\0';
@@ -150,17 +159,29 @@ int main(int argc, char **argv){
 
 	fwrite(&h, sizeof(Header), 1, arquivoSaida);
 
-	/* Como o rank é usado para indicar a linha e coluna inicial na função
-	 calcular_sobel e a linha e coluna inicial devem ser 1, o rank do processo
+	/* Como o rank é usado para indicar a linha e coluna iniciais na função
+	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
 	 pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
 	 o último é igual ao número de processos total. */
-	// rank = 1; 
+	if (numProc == 1) {
+		rank = 1; 
 
-	for (p = 1; p < numProc; p++) {
-		fork();
-		if (pid == 0) {
-			rank = p;
-			break;
+		for (p = 2; p <= numProc; p++) {
+			fork();
+			if (pid == 0) {
+				rank = p;
+				break;
+			}
+		}
+	} else {
+		rank = 0;
+
+		for (p = 1; p < numProc; p++) {
+			fork();
+			if (pid == 0) {
+				rank = p;
+				break;
+			}
 		}
 	}
 
@@ -185,11 +206,26 @@ int main(int argc, char **argv){
 		fclose(arquivoSaida);
 
 	}
-	// !SECTION Filtro de Sobel
+	# pragma endregion Aplicar o filtro de Sobel
 
+	# pragma region Encerramento
 	// Desconectar e deletar as áreas de memórias compartilhadas
 	shmdt(sobel);
 	shmctl(idShmSobel, IPC_RMID, 0);
+	
+	long size;
+	char *buf;
+	char *ptr;
+
+	size = pathconf(".", _PC_PATH_MAX);
+
+
+	if ((buf = (char *)malloc((size_t)size)) != NULL)
+		ptr = getcwd(buf, (size_t)size);
+
+	printf("Os resultados podem ser encontrados em %s\n", ptr);
+
+	#pragma endregion
 
 	return 0;
 }
