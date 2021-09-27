@@ -61,11 +61,7 @@ int main(int argc, char **argv){
 	FILE *arquivoEntrada = NULL;
 	char nomeArquivo[50];
 
-	if (argc <= 1) {
-		strcpy(nomeArquivo, "Flor.bmp");
-		numProc = 4;
-
-	} else if (argc == 3) {
+	if (argc == 3) {
 		strcpy(nomeArquivo, argv[1]);
 		numProc = atol(argv[2]);
 
@@ -163,32 +159,21 @@ int main(int argc, char **argv){
 	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
 	 pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
 	 o último é igual ao número de processos total. */
-	if (numProc == 1) {
-		rank = 1; 
+	
+	rank = 1;
 
-		for (p = 2; p <= numProc; p++) {
-			fork();
-			if (pid == 0) {
-				rank = p;
-				break;
-			}
-		}
-	} else {
-		rank = 0;
-
-		for (p = 1; p < numProc; p++) {
-			fork();
-			if (pid == 0) {
-				rank = p;
-				break;
-			}
+	for (p = 2; p <= numProc; ++p) {
+		pid = fork();
+		if (pid == 0) {
+			rank = p;
+			break;
 		}
 	}
 
 	calcular_sobel(greyscale, sobel, rank, numProc);
 
 	if (rank == 1) {
-		for (p = 1; p < numProc; p++) { wait(NULL); }
+		for (p = 2; p <= numProc; ++p) { wait(NULL); }
 
 		Pixel temp;
 		for (i = 0; i < h.altura; i++) {
@@ -205,6 +190,9 @@ int main(int argc, char **argv){
 
 		fclose(arquivoSaida);
 
+	} else {
+		shmdt(sobel);
+		return 0;
 	}
 	# pragma endregion Aplicar o filtro de Sobel
 
