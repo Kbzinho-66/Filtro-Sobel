@@ -153,7 +153,6 @@ int main(int argc, char **argv){
 		exit(0);
 	}
 
-	fwrite(&h, sizeof(Header), 1, arquivoSaida);
 
 	/* Como o rank é usado para indicar a linha e coluna iniciais na função
 	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
@@ -174,6 +173,8 @@ int main(int argc, char **argv){
 
 	if (rank == 1) {
 		for (p = 2; p <= numProc; ++p) { wait(NULL); }
+
+		fwrite(&h, sizeof(Header), 1, arquivoSaida);
 
 		Pixel temp;
 		for (i = 0; i < h.altura; i++) {
