@@ -9,17 +9,19 @@
 #pragma pack(1)
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
 
-#define CELL_A linha-1][coluna-1
-#define CELL_B linha-1][coluna
-#define CELL_C linha-1][coluna+1
-#define CELL_D linha  ][coluna-1
-#define CELL_E linha  ][coluna
-#define CELL_F linha  ][coluna+1
-#define CELL_G linha+1][coluna-1
-#define CELL_H linha+1][coluna
-#define CELL_I linha+1][coluna+1
+#define CELL_A linha-1 * largura + coluna-1
+#define CELL_B linha-1 * largura + coluna
+#define CELL_C linha-1 * largura + coluna+1
+#define CELL_D linha   * largura + coluna-1
+#define CELL_E linha   * largura + coluna
+#define CELL_F linha   * largura + coluna+1
+#define CELL_G linha+1 * largura + coluna-1
+#define CELL_H linha+1 * largura + coluna
+#define CELL_I linha+1 * largura + coluna+1
 
-#define sobel(linha, coluna) sobel[linha * h.largura + coluna]
+#define  greyscale(i,j) greyscale[i * largura + j]
+
+#define sobel(linha, coluna) sobel[linha * largura + coluna]
 
 typedef unsigned char Byte;
 struct header {
@@ -49,16 +51,16 @@ struct pixel{
 };
 typedef struct pixel Pixel;
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc);
+void leitura_greyscale(FILE* arquivoEntrada, Byte* greyscale, int altura, int largura);
 
-Header h;
+void calcular_sobel(Byte* greyscale, Byte* sobel, int rank, int numProc, int altura, int largura);
+
 
 int main(int argc, char **argv){
 
-	#pragma region Abertura dos arquivos
-
+	Header h;
 	int numProc;
-	FILE *arquivoEntrada = NULL;
+	FILE* arquivoEntrada = NULL;
 	char nomeArquivo[50];
 
 	if (argc == 3) {
@@ -76,42 +78,27 @@ int main(int argc, char **argv){
         exit(0);
 	}
 
-	#pragma endregion 
-
-	#pragma region Leitura do arquivo e conversão pra Grayscale
-
 	fread(&h, sizeof(Header), 1, arquivoEntrada);	
-
-	int chaveShmSobel = 7, idShmSobel;
-	int tamanho = h.altura * h.largura * sizeof(Byte);
-	int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
+	int altura = h.altura;
+	int largura = h.largura;
+	int tamanho = altura * largura * sizeof(Byte);
+	int alinhamento = (4 - (largura * sizeof(Pixel)) % 4) % 4;
 	int i, j;
-	Byte **greyscale, *sobel;
+	Byte* greyscale = NULL;
+	Byte* sobel = NULL;
 	Pixel temp;
 
-	greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
-
-	idShmSobel = shmget(chaveShmSobel, tamanho, 0600 | IPC_CREAT);
-	sobel = shmat(idShmSobel, NULL, 0);
-
-	for (i = 0; i < h.altura; i++) {
-		greyscale[i] = (Byte*) malloc (h.largura * sizeof(Byte));
-	}
-
-	// Ler todos os pixels da imagem e converter pra greyscale
-	for(i = 0; i < h.altura; i++) {
-		for(j = 0; j < h.largura; j++) {
-			fread(&temp, sizeof(Pixel), 1, arquivoEntrada);
-			greyscale[i][j] = temp.red * 0.2126 + temp.green * 0.7152 + temp.blue * 0.0722;
-		}
-	}
+	greyscale = (Byte*) malloc(altura * largura * sizeof(Byte));
+	leitura_greyscale(arquivoEntrada, greyscale, altura, largura);
 
 	fclose(arquivoEntrada);
 
-	# pragma endregion
+	int chaveShmSobel = 7, idShmSobel;
+	idShmSobel = shmget(chaveShmSobel, tamanho, 0600 | IPC_CREAT);
+	sobel = shmat(idShmSobel, NULL, 0);
 
 	# pragma region Escrever o arquivo em preto e branco
-	FILE *arquivoSaida = NULL;
+	FILE* arquivoSaida = NULL;
 	char saida[50];
 
 	strcpy(saida, nomeArquivo);
@@ -125,9 +112,9 @@ int main(int argc, char **argv){
 	}
 
 	fwrite(&h, sizeof(Header), 1, arquivoSaida);
-	for (i = 0; i < h.altura; i++) {
-		for (j = 0; j < h.largura; j++) {
-			temp.red = temp.green = temp.blue = greyscale[i][j];
+	for (i = 0; i < altura; i++) {
+		for (j = 0; j < largura; j++) {
+			temp.red = temp.green = temp.blue = greyscale[i* largura + j];
 			fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
 		}
 
@@ -139,109 +126,132 @@ int main(int argc, char **argv){
 	fclose(arquivoSaida);
 	# pragma endregion Escrever o arquivo em preto e branco
 
-	# pragma region Aplicar o filtro de Sobel
-	int pid, rank, p;
-	pid = rank = 0;
+	// # pragma region Aplicar o filtro de Sobel
+	// int pid, rank, p;
+	// pid = rank = 0;
 
-	strcpy(saida, nomeArquivo);
-	saida[strlen(saida) - 4] = '\0';
-	strcat(saida, "_Sobel");
+	// strcpy(saida, nomeArquivo);
+	// saida[strlen(saida) - 4] = '\0';
+	// strcat(saida, "_Sobel");
 
-	arquivoSaida = fopen(saida, "wb");
-	if (arquivoSaida == NULL) {
-		printf("Erro ao salvar a imagem filtrada.\n");
-		exit(0);
-	}
+	// arquivoSaida = fopen(saida, "wb");
+	// if (arquivoSaida == NULL) {
+	// 	printf("Erro ao salvar a imagem filtrada.\n");
+	// 	exit(0);
+	// }
 
 
-	/* Como o rank é usado para indicar a linha e coluna iniciais na função
-	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
-	 pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
-	 o último é igual ao número de processos total. */
+	// /* Como o rank é usado para indicar a linha e coluna iniciais na função
+	//  calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
+	//  pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
+	//  o último é igual ao número de processos total. */
 	
-	rank = 1;
+	// rank = 1;
 
-	for (p = 2; p <= numProc; ++p) {
-		pid = fork();
-		if (pid == 0) {
-			rank = p;
-			break;
-		}
-	}
+	// for (p = 2; p <= numProc; ++p) {
+	// 	pid = fork();
+	// 	if (pid == 0) {
+	// 		rank = p;
+	// 		break;
+	// 	}
+	// }
 
-	calcular_sobel(greyscale, sobel, rank, numProc);
+	// calcular_sobel(greyscale, sobel, rank, numProc, altura, largura);
 
-	if (rank == 1) {
-		for (p = 2; p <= numProc; ++p) { wait(NULL); }
+	// if (rank == 1) {
+	// 	for (p = 2; p <= numProc; ++p) { wait(NULL); }
 
-		fwrite(&h, sizeof(Header), 1, arquivoSaida);
+	// 	fwrite(&h, sizeof(Header), 1, arquivoSaida);
 
-		Pixel temp;
-		for (i = 0; i < h.altura; i++) {
-			for (j = 0; j < h.largura; j++) {
-				temp.red = temp.green = temp.blue = sobel(i,j);
-				fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
-			}
+	// 	Pixel temp;
+	// 	for (i = 0; i < altura; i++) {
+	// 		for (j = 0; j < largura; j++) {
+	// 			temp.red = temp.green = temp.blue = sobel(i,j);
+	// 			fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
+	// 		}
 
-			for (j = 0; j < alinhamento; j++) {
-				fputc(0x00, arquivoSaida);
-			}
+	// 		for (j = 0; j < alinhamento; j++) {
+	// 			fputc(0x00, arquivoSaida);
+	// 		}
 			
-		}
+	// 	}
 
-		fclose(arquivoSaida);
+	// 	fclose(arquivoSaida);
 
-	} else {
-		shmdt(sobel);
-		return 0;
-	}
-	# pragma endregion Aplicar o filtro de Sobel
+	// } else {
+	// 	shmdt(sobel);
+	// 	return 0;
+	// }
+	// # pragma endregion Aplicar o filtro de Sobel
 
-	# pragma region Encerramento
-	// Desconectar e deletar as áreas de memórias compartilhadas
-	shmdt(sobel);
-	shmctl(idShmSobel, IPC_RMID, 0);
+	// # pragma region Encerramento
+	// // Desconectar e deletar as áreas de memórias compartilhadas
+	// shmdt(sobel);
+	// shmctl(idShmSobel, IPC_RMID, 0);
 	
-	long size;
-	char *buf;
-	char *ptr;
+	// long size;
+	// char* buf;
+	// char* ptr;
 
-	size = pathconf(".", _PC_PATH_MAX);
+	// size = pathconf(".", _PC_PATH_MAX);
 
 
-	if ((buf = (char *)malloc((size_t)size)) != NULL)
-		ptr = getcwd(buf, (size_t)size);
+	// if ((buf = (char *)malloc((size_t)size)) != NULL)
+	// 	ptr = getcwd(buf, (size_t)size);
 
-	printf("Os resultados podem ser encontrados em %s\n", ptr);
+	// printf("Os resultados podem ser encontrados em %s\n", ptr);
 
-	#pragma endregion
+	// #pragma endregion
 
 	return 0;
 }
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc) {
+/**
+ * @brief Lê a imagem inteira e salva somente após a conversão pra tons de cinza. 
+ * 
+ * @param arquivoEntrada O ponteiro pra imagem que vai ser convertida.
+ * @param greyscale Um ponteiro pra matriz de Bytes em que o resultado vai ser armazenado.
+ * @param altura A altura em pixels da imagem, definida no Header
+ * @param largura A largura em pixels da imagem, definida no Header
+ */
+void leitura_greyscale(FILE *arquivoEntrada, Byte *greyscale, int altura, int largura) {
 
-	int linha, coluna;
-	double gx, gy;
-	Byte p;
+	int i, j;
+	Pixel temp;
 
-	// Aplicação do filtro de Sobel
-	for (linha = rank; linha < h.altura - 1; linha++) {
-		for (coluna = 1; coluna < h.largura - 1; coluna++) {
-			
-			gx = 
-				greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
-			+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
-			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
-
-			gy = 
-				greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
-			+ 	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
-			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
-
-			p = (Byte) sqrt(gx*gx + gy*gy);
-			
-			sobel(linha, coluna) = p;
+	// Ler todos os pixels da imagem e converter pra greyscale
+	for(i = 0; i < altura; i++) {
+		for(j = 0; j < largura; j++) {
+			fread(&temp, sizeof(Pixel), 1, arquivoEntrada);
+			greyscale(i,j) = temp.red * 0.2126 + temp.green * 0.7152 + temp.blue * 0.0722;
 		}
 	}
+
 }
+
+// void calcular_sobel(Byte* greyscale, Byte* sobel, int rank, int numProc, int altura, int largura) {
+
+// 	int linha, coluna;
+// 	double gx, gy;
+// 	Byte p;
+
+// 	// Aplicação do filtro de Sobel
+// 	for (linha = rank; linha < altura - 1; linha++) {
+// 		for (coluna = 1; coluna < largura - 1; coluna++) {
+			
+// 			gx = 
+// 				greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
+// 			+ 	greyscale[CELL_D] * -2 + greyscale[CELL_E] * 0 + greyscale[CELL_F] * 2
+// 			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * 0 + greyscale[CELL_I] * 1;
+
+// 			gy = 
+// 				greyscale[CELL_A] * 1  + greyscale[CELL_B] * 2  + greyscale[CELL_C] * 1
+// 			+ 	greyscale[CELL_D] * 0  + greyscale[CELL_E] * 0  + greyscale[CELL_F] * 0
+// 			+ 	greyscale[CELL_G] * -1 + greyscale[CELL_H] * -2 + greyscale[CELL_I] * -1;
+
+// 			p = (Byte) sqrt(gx*gx + gy*gy);
+			
+// 			sobel(linha, coluna) = p;
+// 		}
+// 	}
+// }
