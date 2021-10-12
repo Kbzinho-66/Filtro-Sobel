@@ -53,15 +53,17 @@ void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h);
 
 void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc);
 
+void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h);
+
+void mostrar_diretorio(void);
+
 Header h;
 
 int main(int argc, char **argv){
 
-	#pragma region Abertura dos arquivos
-
 	int numProc;
-	FILE *arquivoEntrada = NULL, *arquivoSaida = NULL;
-	char nomeArquivo[50], saida[50];
+	FILE *arquivoEntrada = NULL;
+	char nomeArquivo[50];
 
 	if (argc == 3) {
 		strcpy(nomeArquivo, argv[1]);
@@ -78,7 +80,6 @@ int main(int argc, char **argv){
         exit(0);
 	}
 
-	#pragma endregion 
 
 	#pragma region Leitura do arquivo e conversão pra Grayscale
 
@@ -86,7 +87,6 @@ int main(int argc, char **argv){
 
 	int chaveShmSobel = 7, idShmSobel;
 	int tamanho = h.altura * h.largura * sizeof(Byte);
-	int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
 	int i, j;
 	Byte **greyscale, *sobel;
 	Pixel temp;
@@ -116,17 +116,6 @@ int main(int argc, char **argv){
 	int pid, rank, p;
 	pid = rank = 0;
 
-	strcpy(saida, nomeArquivo);
-	saida[strlen(saida) - 4] = '\0';
-	strcat(saida, "_Sobel");
-
-	arquivoSaida = fopen(saida, "wb");
-	if (arquivoSaida == NULL) {
-		printf("Erro ao salvar a imagem filtrada.\n");
-		exit(0);
-	}
-
-
 	/* Como o rank é usado para indicar a linha e coluna iniciais na função
 	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
 	 pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
@@ -146,22 +135,7 @@ int main(int argc, char **argv){
 	if (rank == 1) {
 		for (p = 2; p <= numProc; ++p) { wait(NULL); }
 
-		fwrite(&h, sizeof(Header), 1, arquivoSaida);
-
-		Pixel temp;
-		for (i = 0; i < h.altura; i++) {
-			for (j = 0; j < h.largura; j++) {
-				temp.red = temp.green = temp.blue = sobel(i,j);
-				fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
-			}
-
-			for (j = 0; j < alinhamento; j++) {
-				fputc(0x00, arquivoSaida);
-			}
-			
-		}
-
-		fclose(arquivoSaida);
+		escrever_sobel(sobel, nomeArquivo, h);
 
 	} else {
 		shmdt(sobel);
@@ -169,24 +143,11 @@ int main(int argc, char **argv){
 	}
 	# pragma endregion Aplicar o filtro de Sobel
 
-	# pragma region Encerramento
 	// Desconectar e deletar as áreas de memórias compartilhadas
 	shmdt(sobel);
 	shmctl(idShmSobel, IPC_RMID, 0);
-	
-	long size;
-	char *buf;
-	char *ptr;
 
-	size = pathconf(".", _PC_PATH_MAX);
-
-
-	if ((buf = (char *)malloc((size_t)size)) != NULL)
-		ptr = getcwd(buf, (size_t)size);
-
-	printf("Os resultados podem ser encontrados em %s\n", ptr);
-
-	#pragma endregion
+	mostrar_diretorio();
 
 	return 0;
 }
@@ -197,7 +158,7 @@ void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h) {
 	char saida[50];
 	Pixel temp;
 	int i, j;
-	int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
+	// int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
 
 	strcpy(saida, nomeArquivo);
 	saida[strlen(saida) - 4] = '\0'; // Tirar o .bmp do final
@@ -216,9 +177,9 @@ void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h) {
 			fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
 		}
 
-		for (j = 0; j < alinhamento; j++) {
-			fputc(0x00, arquivoSaida);
-		}
+		// for (j = 0; j < alinhamento; j++) {
+		// 	fputc(0x00, arquivoSaida);
+		// }
 	}	
 
 	fclose(arquivoSaida);
@@ -249,4 +210,54 @@ void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc) {
 			sobel(linha, coluna) = p;
 		}
 	}
+}
+
+void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h) {
+
+	FILE *arquivoSaida = NULL;
+	char saida[50];
+	Pixel temp;
+	int i, j;
+	// int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
+
+	strcpy(saida, nomeArquivo);
+	saida[strlen(saida) - 4] = '\0';
+	strcat(saida, "_Sobel");
+
+	arquivoSaida = fopen(saida, "wb");
+	if (arquivoSaida == NULL) {
+		printf("Erro ao salvar a imagem filtrada.\n");
+		exit(0);
+	}
+
+	fwrite(&h, sizeof(Header), 1, arquivoSaida);
+
+	for (i = 0; i < h.altura; i++) {
+		for (j = 0; j < h.largura; j++) {
+			temp.red = temp.green = temp.blue = sobel(i,j);
+			fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
+		}
+
+		// for (j = 0; j < alinhamento; j++) {
+		// 	fputc(0x00, arquivoSaida);
+		// }
+		
+	}
+
+	fclose(arquivoSaida);
+}
+
+void mostrar_diretorio(void) {
+	
+	long size;
+	char *buf;
+	char *ptr;
+
+	size = pathconf(".", _PC_PATH_MAX);
+
+
+	if ((buf = (char *)malloc((size_t)size)) != NULL)
+		ptr = getcwd(buf, (size_t)size);
+
+	printf("Os resultados podem ser encontrados em %s\n", ptr);
 }
