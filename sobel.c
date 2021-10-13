@@ -19,7 +19,7 @@
 #define CELL_H linha+1][coluna
 #define CELL_I linha+1][coluna+1
 
-#define sobel(linha, coluna) sobel[linha * h.largura + coluna]
+#define sobel(i, j) sobel[i * largura + j]
 
 typedef unsigned char Byte;
 struct header {
@@ -51,19 +51,25 @@ typedef struct pixel Pixel;
 
 void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h);
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc);
+void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc, int altura, int largura);
 
 void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h);
 
 void mostrar_diretorio(void);
 
-Header h;
-
 int main(int argc, char **argv){
 
-	int numProc;
+	Header h;
+	Byte **greyscale, *sobel;
+	Pixel temp;
+
+	int chaveShmSobel = 7, idShmSobel;
+	int numProc, pid, rank, p;
+
 	FILE *arquivoEntrada = NULL;
 	char nomeArquivo[50];
+
+	int i, j;
 
 	if (argc == 3) {
 		strcpy(nomeArquivo, argv[1]);
@@ -80,22 +86,15 @@ int main(int argc, char **argv){
         exit(0);
 	}
 
-
 	#pragma region Leitura do arquivo e conversão pra Grayscale
 
 	fread(&h, sizeof(Header), 1, arquivoEntrada);	
-
-	int chaveShmSobel = 7, idShmSobel;
 	int tamanho = h.altura * h.largura * sizeof(Byte);
-	int i, j;
-	Byte **greyscale, *sobel;
-	Pixel temp;
-
-	greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
 
 	idShmSobel = shmget(chaveShmSobel, tamanho, 0600 | IPC_CREAT);
 	sobel = shmat(idShmSobel, NULL, 0);
 
+	greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
 	for (i = 0; i < h.altura; i++) {
 		greyscale[i] = (Byte*) malloc (h.largura * sizeof(Byte));
 	}
@@ -113,7 +112,6 @@ int main(int argc, char **argv){
 	# pragma endregion
 
 	# pragma region Aplicar o filtro de Sobel
-	int pid, rank, p;
 	pid = rank = 0;
 
 	/* Como o rank é usado para indicar a linha e coluna iniciais na função
@@ -130,9 +128,11 @@ int main(int argc, char **argv){
 		}
 	}
 
-	calcular_sobel(greyscale, sobel, rank, numProc);
+	calcular_sobel(greyscale, sobel, rank, numProc, h.altura, h.largura);
 
 	if (rank == 1) {
+		// Se for o processo pai, esperar os filhos terminarem e escrever
+		// o arquivo de saída
 		for (p = 2; p <= numProc; ++p) { wait(NULL); }
 
 		escrever_sobel(sobel, nomeArquivo, h);
@@ -185,15 +185,15 @@ void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h) {
 	fclose(arquivoSaida);
 }
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc) {
+void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc, int altura, int largura) {
 
 	int linha, coluna;
 	double gx, gy;
 	Byte p;
 
 	// Aplicação do filtro de Sobel
-	for (linha = rank; linha < h.altura - 1; linha++) {
-		for (coluna = 1; coluna < h.largura - 1; coluna++) {
+	for (linha = rank; linha < altura - 1; linha++) {
+		for (coluna = 1; coluna < largura - 1; coluna++) {
 			
 			gx = 
 				greyscale[CELL_A] * -1 + greyscale[CELL_B] * 0 + greyscale[CELL_C] * 1
@@ -218,6 +218,7 @@ void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h) {
 	char saida[50];
 	Pixel temp;
 	int i, j;
+	int largura = h.largura;
 	// int alinhamento = (4 - (h.largura * sizeof(Pixel)) % 4) % 4;
 
 	strcpy(saida, nomeArquivo);
