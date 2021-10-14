@@ -1,10 +1,12 @@
+//===========================================================//
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
-#include <sys/shm.h>
 #include <sys/wait.h>
+#include <pthread.h>
 
 #pragma pack(1)
 #pragma GCC diagnostic ignored "-Wunknown-pragmas"
@@ -19,9 +21,11 @@
 #define CELL_H linha+1][coluna
 #define CELL_I linha+1][coluna+1
 
-#define sobel(i, j) sobel[i * largura + j]
+#define resultado(i, j) resultado[i * largura + j]
 
 typedef unsigned char Byte;
+
+//===========================================================//
 struct header {
 	unsigned short tipo;
 	unsigned int tamanho_arquivo;
@@ -42,44 +46,87 @@ struct header {
 }; 
 typedef struct header Header;
 
-struct pixel{
+struct pixel {
 	Byte blue;
 	Byte green;
 	Byte red;
 };
 typedef struct pixel Pixel;
 
+struct args {
+	int id;
+	int numThreads;
+	int tamMasc;
+	int* mascara;
+	Byte* gauss;
+	Byte** greyscale;
+};
+typedef struct args Args;
+
+//===========================================================//
+
 void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h);
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc, int altura, int largura);
+void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numThreads, int altura, int largura);
 
 void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h);
 
 void mostrar_diretorio(void);
 
+//===========================================================//
+
 int main(int argc, char **argv){
 
-	Header h;
-	Byte **greyscale, *sobel;
-	Pixel temp;
+	const int mascara3[3][3] = {
+		1, 2, 1,
+		2, 4, 2,
+		1, 2, 1
+	};
 
-	int chaveShmSobel = 7, idShmSobel;
-	int numProc, pid, rank, p;
+	const int mascara5[5][5] = {
+		1, 	4, 	7, 	4, 1,
+		4, 16, 26, 16, 4,
+		7, 26, 41, 26, 7,
+		4, 16, 26, 16, 4,
+		1, 	4, 	7, 	4, 1
+	};
+
+	const int mascara7[7][7] = {
+		0, 	0, 	1, 	 2,  1,  0, 0,
+		0, 	3, 13, 	22, 13,  3, 0,
+		1, 13, 59, 	97, 59, 13, 1,
+		2, 22, 97, 159, 97, 22, 2,
+		1, 13, 59, 	97, 59, 13, 1,
+		0, 	3, 13, 	22, 13,  3, 0,
+		0, 	0, 	1, 	 2,  1,  0, 0
+	};
+
+	Header h;
+	Byte **greyscale, *resultado;
+	Pixel temp;
+	Args argumentos;
+
+	int numThreads, pid, rank, p;
 
 	FILE *arquivoEntrada = NULL;
 	char nomeArquivo[50];
 
 	int i, j;
+	int tamMasc;
 
-	if (argc == 3) {
+	if (argc == 4) {
 		strcpy(nomeArquivo, argv[1]);
-		numProc = atol(argv[2]);
-
+		tamMasc = atol(argv[2]);
+		numThreads = atol(argv[3]);
+		if (tamMasc % 2 != 1 && tamMasc < 3 || tamMasc > 7) {
+			printf("O tamanho da máscara deve ser 3, 5, ou 7.\n");
+			exit(0);
+		}
     } else {
-		printf("%s <Nome do arquivo original> <Número máximo de processos>\n", argv[0]);
+		printf("%s <Nome do arquivo original> <Tamanho da máscara> <Número máximo de threads> \n", argv[0]);
 		exit(0);
 	}
-	
+
 	arquivoEntrada = fopen(nomeArquivo, "rb");
 	if (arquivoEntrada == NULL) {
         printf("Erro ao abrir a imagem de entrada.\n");
@@ -90,9 +137,6 @@ int main(int argc, char **argv){
 
 	fread(&h, sizeof(Header), 1, arquivoEntrada);	
 	int tamanho = h.altura * h.largura * sizeof(Byte);
-
-	idShmSobel = shmget(chaveShmSobel, tamanho, 0600 | IPC_CREAT);
-	sobel = shmat(idShmSobel, NULL, 0);
 
 	greyscale = (Byte**) malloc(h.altura * sizeof(Byte *));
 	for (i = 0; i < h.altura; i++) {
@@ -111,46 +155,42 @@ int main(int argc, char **argv){
 
 	# pragma endregion
 
-	# pragma region Aplicar o filtro de Sobel
-	pid = rank = 0;
+	# pragma region Aplicação do filtro de Gauss
 
-	/* Como o rank é usado para indicar a linha e coluna iniciais na função
-	 calcular_sobel e a linha e coluna iniciais devem ser 1, o rank do processo
-	 pai precisa ser 1. Por consequência, o rank do primeiro filho é 2 e 
-	 o último é igual ao número de processos total. */
-	
-	rank = 1;
-	for (p = 2; p <= numProc; ++p) {
-		pid = fork();
-		if (pid == 0) {
-			rank = p;
-			break;
+	for (p = 0; p < numThreads; p++) {
+
+		argumentos.id = p;
+		argumentos.numThreads = numThreads;
+
+		if (tamMasc == 3) {
+			argumentos.tamMasc = 3;
+			argumentos.mascara = &mascara3;
+		} else if (tamMasc == 5) {
+			argumentos.tamMasc = 5;
+			argumentos.mascara = &mascara5;
+		} else {
+			argumentos.tamMasc = 7;
+			argumentos.mascara = &mascara7;
 		}
+
+		argumentos.greyscale = greyscale;
+		argumentos.gauss = resultado;
+
 	}
 
-	calcular_sobel(greyscale, sobel, rank, numProc, h.altura, h.largura);
+	# pragma endregion
 
-	if (rank == 1) {
-		// Se for o processo pai, esperar os filhos terminarem e escrever
-		// o arquivo de saída
-		for (p = 2; p <= numProc; ++p) { wait(NULL); }
 
-		escrever_sobel(sobel, nomeArquivo, h);
+	# pragma region Aplicar o filtro de Sobel
 
-	} else {
-		shmdt(sobel);
-		return 0;
-	}
-	# pragma endregion Aplicar o filtro de Sobel
-
-	// Desconectar e deletar as áreas de memórias compartilhadas
-	shmdt(sobel);
-	shmctl(idShmSobel, IPC_RMID, 0);
+	calcular_sobel(greyscale, resultado, rank, numThreads, h.altura, h.largura);
 
 	mostrar_diretorio();
 
 	return 0;
 }
+
+//===========================================================//
 
 void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h) {
 
@@ -185,7 +225,7 @@ void escrever_greyscale(Byte **greyscale, char *nomeArquivo, Header h) {
 	fclose(arquivoSaida);
 }
 
-void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc, int altura, int largura) {
+void calcular_sobel(Byte **greyscale, Byte *resultado, int rank, int numThreads, int altura, int largura) {
 
 	int linha, coluna;
 	double gx, gy;
@@ -207,12 +247,12 @@ void calcular_sobel(Byte **greyscale, Byte *sobel, int rank, int numProc, int al
 
 			p = (Byte) sqrt(gx*gx + gy*gy);
 			
-			sobel(linha, coluna) = p;
+			resultado(linha, coluna) = p;
 		}
 	}
 }
 
-void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h) {
+void escrever_sobel(Byte *resultado, char *nomeArquivo, Header h) {
 
 	FILE *arquivoSaida = NULL;
 	char saida[50];
@@ -235,7 +275,7 @@ void escrever_sobel(Byte *sobel, char *nomeArquivo, Header h) {
 
 	for (i = 0; i < h.altura; i++) {
 		for (j = 0; j < h.largura; j++) {
-			temp.red = temp.green = temp.blue = sobel(i,j);
+			temp.red = temp.green = temp.blue = resultado(i,j);
 			fwrite(&temp, sizeof(Pixel), 1, arquivoSaida);
 		}
 
