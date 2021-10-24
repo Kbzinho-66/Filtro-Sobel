@@ -1,3 +1,14 @@
+/**
+ * @file gauss.c
+ * @author Gabriel Vieira Alles
+ * @brief Um programa que utiliza pthreads para aplicar os filtros de Gauss e
+ * Sobel sobre uma imagem no formato bmp. É possível salvar todas as imagens 
+ * intermediárias e ainda aplicar um filtro de Mediana alterando o define
+ * EXTRAS para 1.
+ * @version 2.0
+ * @date 2021-10-24
+ * 
+ */
 //========================================================================//
 
 #include <unistd.h>
@@ -58,11 +69,15 @@ typedef struct args Args;
 
 //========================================================================//
 
-void* calcula_gauss(void* argumentos);
+void * calcula_gauss(void* argumentos);
 
-void* calcula_sobel(void* argumentos);
+void * calcula_sobel(void* argumentos);
+
+void * filtro_mediana(void* argumentos);
 
 void escrever_arquivo(int tipo, Byte* matriz, char* nomeOriginal, Header h);
+
+void insertion_sort(Byte *vetor, int tamanho); 
 
 void mostrar_diretorio(void);
 
@@ -158,7 +173,7 @@ int main(int argc, char **argv){
         escrever_arquivo(2, gauss, nomeArquivo, h);
     }
 
-    // Aplicação do Filtro de Sobel sobre a matriz de Gauss
+    // Aplicação do Filtro de Sobel sobre a imagem de Gauss
     for (t = 0; t < numThreads; t++) {
         argumentos[t].entrada = gauss;
         argumentos[t].saida   = sobel;
@@ -171,10 +186,11 @@ int main(int argc, char **argv){
 
     escrever_arquivo(3, sobel, nomeArquivo, h);
 
-    // Aplicação do Filtro de Sobel sobre a matriz em Greyscale, só para comparação
+    // Aplicação do Filtro de Sobel sobre a imagem em Greyscale, só para comparação
     if (EXTRAS) {
         for (t = 0; t < numThreads; t++) {
             argumentos[t].entrada = greyscale;
+            argumentos[t].saida = sobel;
             pthread_create(&threadID[t], NULL, calcula_sobel, (void*) &argumentos[t]);
         }
 
@@ -185,6 +201,20 @@ int main(int argc, char **argv){
         escrever_arquivo(4, sobel, nomeArquivo, h);
     }
 
+    // Aplicação de um Filtro de Mediana sobre a imagem Greyscale
+    if (EXTRAS) {
+        for (t = 0; t < numThreads; t++) {
+            argumentos[t].entrada = greyscale;
+            argumentos[t].saida   = gauss;
+            pthread_create(&threadID[t], NULL, filtro_mediana, (void*) &argumentos[t]);
+        }
+
+        for (t = 0; t < numThreads; t++) {
+            pthread_join(threadID[t], NULL);
+        }
+
+        escrever_arquivo(5, gauss, nomeArquivo, h);
+    }
     mostrar_diretorio();
 
     free(greyscale);
@@ -314,6 +344,41 @@ void * calcula_sobel(void* argumentos) {
     return NULL;
 }
 
+void * filtro_mediana(void* argumentos) {
+
+    Args *p = (Args*) argumentos;
+
+    int linha, coluna;
+    int i, j;
+    int rank 	   = p->id;
+    int numThreads = p->numThreads;
+    int altura     = p->altura;
+    int largura    = p->largura;
+    int tamMasc    = p->tamMasc;
+    int meio       = tamMasc * tamMasc / 2;
+
+    Byte* mascara = NULL;
+    mascara = (Byte*) malloc (tamMasc * tamMasc * sizeof(Byte));
+
+    // Aplicação do filtro de Mediana
+    for (linha = rank + 1; linha < altura - 1; linha += numThreads) {
+        for (coluna = 1; coluna < largura - 1; coluna++) {
+            
+            for (i = -1; i < tamMasc - 1; i++) {
+                for (j = -1; j < tamMasc - 1; j++) {
+                    mascara[(i + 1) * tamMasc + (j + 1)] = p->entrada[ (linha + i) * largura + (coluna + j) ];
+                }
+            }
+            insertion_sort(mascara, tamMasc * tamMasc);
+            
+            
+            p->saida(linha, coluna) = mascara[meio];
+        }
+    }
+
+    return NULL;
+}
+
 void escrever_arquivo(int tipo, Byte* matriz, char* nomeOriginal, Header h) {
 
     FILE *arquivoSaida = NULL;
@@ -335,6 +400,9 @@ void escrever_arquivo(int tipo, Byte* matriz, char* nomeOriginal, Header h) {
             break;
         case 4:
             strcat(saida, "_Sobel");
+            break;
+        case 5:
+            strcat(saida, "_Mediana");
             break;
     }
 
@@ -369,4 +437,22 @@ void mostrar_diretorio(void) {
         ptr = getcwd(buf, (size_t)size);
 
     printf("Os resultados podem ser encontrados em %s\n", ptr);
+}
+
+void insertion_sort(Byte *vetor, int tamanho) {
+
+    int i, j;
+    Byte temp;
+
+    for(i = 1; i < tamanho - 1; i++) {
+        temp = vetor[i];
+        j = i-1;
+
+        while (j >= 0 && vetor[j] > temp) {
+            vetor[j+1] = vetor[j];
+            --j;
+        }
+
+        vetor[j+1] = temp;
+    } 
 }
