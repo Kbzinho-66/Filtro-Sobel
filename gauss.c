@@ -1,4 +1,4 @@
-//===========================================================//
+//========================================================================//
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -11,14 +11,14 @@
 #pragma pack(1)
 
 #define greyscale(i, j) greyscale[i * largura + j]
-#define entrada(i, j) entrada[i * largura + j]
 #define saida(i, j) saida[i * largura + j]
 
 typedef unsigned char Byte;
 
-#define SALVAR_ETAPAS 1
+#define EXTRAS 0
 
-//===========================================================//
+//========================================================================//
+
 struct header {
     unsigned short tipo;
     unsigned int tamanho_arquivo;
@@ -56,7 +56,7 @@ struct args {
 };
 typedef struct args Args;
 
-//===========================================================//
+//========================================================================//
 
 void* calcula_gauss(void* argumentos);
 
@@ -66,7 +66,7 @@ void escrever_arquivo(int tipo, Byte* matriz, char* nomeOriginal, Header h);
 
 void mostrar_diretorio(void);
 
-//===========================================================//
+//========================================================================//
 
 int main(int argc, char **argv){
 
@@ -121,7 +121,7 @@ int main(int argc, char **argv){
     }
     fclose(arquivoEntrada);
 
-    if (SALVAR_ETAPAS) {
+    if (EXTRAS) {
         escrever_arquivo(1, greyscale, nomeArquivo, h);
     }
 
@@ -154,7 +154,7 @@ int main(int argc, char **argv){
         pthread_join(threadID[t], NULL);
     }
 
-    if (SALVAR_ETAPAS) {
+    if (EXTRAS) {
         escrever_arquivo(2, gauss, nomeArquivo, h);
     }
 
@@ -172,7 +172,7 @@ int main(int argc, char **argv){
     escrever_arquivo(3, sobel, nomeArquivo, h);
 
     // Aplicação do Filtro de Sobel sobre a matriz em Greyscale, só para comparação
-    if (SALVAR_ETAPAS) {
+    if (EXTRAS) {
         for (t = 0; t < numThreads; t++) {
             argumentos[t].entrada = greyscale;
             pthread_create(&threadID[t], NULL, calcula_sobel, (void*) &argumentos[t]);
@@ -194,7 +194,7 @@ int main(int argc, char **argv){
     return 0;
 }
 
-//===========================================================//
+//========================================================================//
 
 void * calcula_gauss(void* argumentos) {
 
